@@ -1,0 +1,785 @@
+openapi: 3.0.3
+info:
+  title: PetWatch API
+  description: |
+    PetWatch - AI 반려동물 건강관리 플랫폼 API
+
+    ## 인증
+    모든 API 엔드포인트는 JWT 토큰 기반 인증이 필요합니다.
+    Authorization 헤더에 Bearer 토큰을 포함해주세요.
+
+    ## Rate Limiting
+    - 인증 API: 5 요청/분
+    - 일반 API: 100 요청/분
+    - AI API: 20 요청/시간 (Free), 100 요청/시간 (Premium)
+
+    ## 에러 응답
+    모든 에러 응답은 다음 형식을 따릅니다:
+    ```json
+    {
+      "error": "에러 메시지",
+      "code": "ERROR_CODE",
+      "errors": {} // 선택적 - 필드별 에러
+    }
+    ```
+  version: 1.0.0
+  contact:
+    name: PetWatch Support
+    email: support@petwatch.kr
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.petwatch.kr/v1
+    description: Production
+  - url: https://staging-api.petwatch.kr/v1
+    description: Staging
+  - url: http://localhost:3000/api
+    description: Development
+
+tags:
+  - name: Auth
+    description: 인증 관련 API
+  - name: Pets
+    description: 반려동물 관리 API
+  - name: Health Logs
+    description: 건강 기록 API
+  - name: AI
+    description: AI 분석 및 상담 API
+  - name: Subscription
+    description: 구독 관리 API
+  - name: User
+    description: 사용자 관리 API
+
+paths:
+  # ==========================================================================
+  # Authentication
+  # ==========================================================================
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: 회원가입
+      description: 새로운 사용자를 등록합니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 회원가입 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: 이미 등록된 이메일
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ==========================================================================
+  # Pets
+  # ==========================================================================
+  /pets:
+    get:
+      tags: [Pets]
+      summary: 반려동물 목록 조회
+      description: 로그인한 사용자의 반려동물 목록을 조회합니다.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPets'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Pets]
+      summary: 반려동물 등록
+      description: 새로운 반려동물을 등록합니다.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePetRequest'
+      responses:
+        '201':
+          description: 등록 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: 등록 한도 초과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /pets/{petId}:
+    get:
+      tags: [Pets]
+      summary: 반려동물 상세 조회
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PetId'
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PetDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [Pets]
+      summary: 반려동물 정보 수정
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePetRequest'
+      responses:
+        '200':
+          description: 수정 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Pets]
+      summary: 반려동물 삭제
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PetId'
+      responses:
+        '204':
+          description: 삭제 성공
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==========================================================================
+  # Health Logs
+  # ==========================================================================
+  /health-logs/meal:
+    post:
+      tags: [Health Logs]
+      summary: 식사 기록 추가
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MealLogRequest'
+      responses:
+        '201':
+          description: 기록 성공
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /health-logs/water:
+    post:
+      tags: [Health Logs]
+      summary: 음수량 기록 추가
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaterLogRequest'
+      responses:
+        '201':
+          description: 기록 성공
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /health-logs/elimination:
+    post:
+      tags: [Health Logs]
+      summary: 배변 기록 추가
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EliminationLogRequest'
+      responses:
+        '201':
+          description: 기록 성공
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /health-logs/walk:
+    post:
+      tags: [Health Logs]
+      summary: 산책 기록 추가
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WalkLogRequest'
+      responses:
+        '201':
+          description: 기록 성공
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================================================
+  # AI
+  # ==========================================================================
+  /ai/analyze:
+    post:
+      tags: [AI]
+      summary: AI 건강 분석 요청
+      description: 반려동물의 건강 데이터를 AI가 분석합니다. (프리미엄 기능)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - petId
+              properties:
+                petId:
+                  type: string
+                period:
+                  type: string
+                  enum: [week, month, quarter]
+                  default: week
+      responses:
+        '200':
+          description: 분석 완료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthAnalysis'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: 프리미엄 구독 필요
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /ai/chat:
+    post:
+      tags: [AI]
+      summary: AI 건강 상담
+      description: AI와 반려동물 건강에 대해 상담합니다.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                petId:
+                  type: string
+                message:
+                  type: string
+                  maxLength: 1000
+                sessionId:
+                  type: string
+      responses:
+        '200':
+          description: 응답 생성
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  sessionId:
+                    type: string
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  # ==========================================================================
+  # Subscription
+  # ==========================================================================
+  /subscription:
+    get:
+      tags: [Subscription]
+      summary: 현재 구독 정보 조회
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /subscription/checkout:
+    post:
+      tags: [Subscription]
+      summary: 구독 결제 시작
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - plan
+              properties:
+                plan:
+                  type: string
+                  enum: [PREMIUM, PREMIUM_PLUS]
+      responses:
+        '200':
+          description: 결제 페이지 URL 반환
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checkoutUrl:
+                    type: string
+                    format: uri
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    PetId:
+      name: petId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 반려동물 ID
+
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      description: 페이지 번호
+
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      description: 페이지 당 항목 수
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        image:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CreatePetRequest:
+      type: object
+      required:
+        - species
+        - name
+        - breed
+        - birthDate
+        - gender
+        - weight
+        - size
+      properties:
+        species:
+          type: string
+          enum: [DOG, CAT]
+        name:
+          type: string
+          maxLength: 20
+        breed:
+          type: string
+        birthDate:
+          type: string
+          format: date
+        gender:
+          type: string
+          enum: [MALE, FEMALE]
+        weight:
+          type: number
+        size:
+          type: string
+          enum: [SMALL, MEDIUM, LARGE, GIANT]
+        neutered:
+          type: boolean
+          default: false
+        activityLevel:
+          type: string
+          enum: [LOW, MODERATE, HIGH]
+          default: MODERATE
+        dietType:
+          type: string
+          enum: [DRY_FOOD, WET_FOOD, RAW, HOMEMADE, PRESCRIPTION, MIXED]
+          default: DRY_FOOD
+
+    UpdatePetRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        breed:
+          type: string
+        weight:
+          type: number
+        neutered:
+          type: boolean
+        activityLevel:
+          type: string
+          enum: [LOW, MODERATE, HIGH]
+        dietType:
+          type: string
+
+    Pet:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        species:
+          type: string
+        breed:
+          type: string
+        birthDate:
+          type: string
+          format: date
+        gender:
+          type: string
+        weight:
+          type: number
+        size:
+          type: string
+        profileImage:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    PetDetail:
+      allOf:
+        - $ref: '#/components/schemas/Pet'
+        - type: object
+          properties:
+            healthConditions:
+              type: array
+              items:
+                type: object
+            medications:
+              type: array
+              items:
+                type: object
+            vaccinations:
+              type: array
+              items:
+                type: object
+            recentHealthLogs:
+              type: array
+              items:
+                type: object
+            latestAnalysis:
+              $ref: '#/components/schemas/HealthAnalysis'
+
+    PaginatedPets:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pet'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+        hasNext:
+          type: boolean
+        hasPrev:
+          type: boolean
+
+    MealLogRequest:
+      type: object
+      required:
+        - petId
+        - time
+        - type
+        - amount
+      properties:
+        petId:
+          type: string
+        time:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [BREAKFAST, LUNCH, DINNER, SNACK, TREAT]
+        amount:
+          type: integer
+          description: 양 (g)
+        consumedPercent:
+          type: integer
+          default: 100
+        notes:
+          type: string
+
+    WaterLogRequest:
+      type: object
+      required:
+        - petId
+        - amount
+      properties:
+        petId:
+          type: string
+        amount:
+          type: integer
+          description: 양 (ml)
+
+    EliminationLogRequest:
+      type: object
+      required:
+        - petId
+        - time
+        - type
+      properties:
+        petId:
+          type: string
+        time:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [URINE, FECES]
+        fecesConsistency:
+          type: integer
+          minimum: 1
+          maximum: 7
+        notes:
+          type: string
+
+    WalkLogRequest:
+      type: object
+      required:
+        - petId
+        - startTime
+        - endTime
+        - duration
+      properties:
+        petId:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        duration:
+          type: integer
+          description: 산책 시간 (분)
+        distance:
+          type: number
+          description: 거리 (km)
+
+    HealthAnalysis:
+      type: object
+      properties:
+        id:
+          type: string
+        petId:
+          type: string
+        date:
+          type: string
+          format: date
+        overallHealthScore:
+          type: integer
+        nutritionScore:
+          type: integer
+        digestionScore:
+          type: integer
+        activityScore:
+          type: integer
+        hydrationScore:
+          type: integer
+        recommendations:
+          type: array
+          items:
+            type: string
+        vetVisitRecommended:
+          type: boolean
+
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+        plan:
+          type: string
+          enum: [FREE, PREMIUM, PREMIUM_PLUS]
+        status:
+          type: string
+          enum: [ACTIVE, CANCELED, PAST_DUE, EXPIRED]
+        currentPeriodEnd:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: 잘못된 요청
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: 인증 필요
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: 리소스를 찾을 수 없음
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    RateLimited:
+      description: 요청 한도 초과
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: 재시도까지 대기 시간 (초)
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: 요청 한도
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: 남은 요청 수
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+          description: 한도 리셋 시간 (Unix timestamp)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

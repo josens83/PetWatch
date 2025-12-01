@@ -1,119 +1,115 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/db"
+/**
+ * Pet API Routes
+ * CRUD operations for pet management
+ */
 
-export async function GET() {
-  try {
-    const session = await getServerSession(authOptions)
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
+import {
+  createApiHandler,
+  successResponse,
+  createdResponse,
+  parseBody,
+  parsePagination,
+  paginatedResponse,
+  checkPetLimit,
+} from '@/lib/api-utils'
+import { createPetSchema } from '@/lib/validations/pet'
+import { logger } from '@/lib/logger'
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+// ============================================================================
+// GET /api/pets - List all pets for current user
+// ============================================================================
 
-    const pets = await prisma.pet.findMany({
-      where: { ownerId: session.user.id },
+export const GET = createApiHandler(async (request, { userId }) => {
+  const pagination = parsePagination(request.url)
+
+  const [pets, total] = await Promise.all([
+    prisma.pet.findMany({
+      where: { ownerId: userId },
       include: {
-        healthConditions: true,
-        medications: true,
-        vaccinations: true,
+        healthConditions: {
+          where: { status: 'ACTIVE' },
+          take: 3,
+        },
+        medications: {
+          where: {
+            OR: [
+              { endDate: null },
+              { endDate: { gte: new Date() } },
+            ],
+          },
+          take: 3,
+        },
+        vaccinations: {
+          where: {
+            nextDueDate: { gte: new Date() },
+          },
+          orderBy: { nextDueDate: 'asc' },
+          take: 3,
+        },
         healthLogs: {
-          orderBy: { date: "desc" },
+          orderBy: { date: 'desc' },
           take: 7,
         },
         healthAnalyses: {
-          orderBy: { date: "desc" },
+          orderBy: { date: 'desc' },
           take: 1,
         },
+        healthAlerts: {
+          where: { readAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
       },
-      orderBy: { createdAt: "desc" },
-    })
+      orderBy: { createdAt: 'desc' },
+      skip: pagination.skip,
+      take: pagination.limit,
+    }),
+    prisma.pet.count({ where: { ownerId: userId } }),
+  ])
 
-    return NextResponse.json(pets)
-  } catch (error) {
-    console.error("Error fetching pets:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch pets" },
-      { status: 500 }
-    )
-  }
-}
+  logger.info('Pets fetched', { userId, count: pets.length })
 
-export async function POST(request: Request) {
-  try {
-    const session = await getServerSession(authOptions)
+  return paginatedResponse(pets, total, pagination)
+})
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+// ============================================================================
+// POST /api/pets - Create a new pet
+// ============================================================================
 
-    const body = await request.json()
+export const POST = createApiHandler(async (request, { userId }) => {
+  // Check pet limit before creating
+  await checkPetLimit(userId)
 
-    const {
-      species,
-      name,
-      breed,
-      birthDate,
-      gender,
-      neutered,
-      weight,
-      size,
-      furColor,
-      distinctiveFeatures,
-      activityLevel,
-      dietType,
-      allergies,
-    } = body
+  // Parse and validate body
+  const body = await parseBody(request, createPetSchema)
 
-    // Validation
-    if (!species || !name || !breed || !birthDate || !gender || !weight || !size) {
-      return NextResponse.json(
-        { error: "필수 정보를 모두 입력해주세요." },
-        { status: 400 }
-      )
-    }
+  // Create pet
+  const pet = await prisma.pet.create({
+    data: {
+      ownerId: userId,
+      species: body.species,
+      name: body.name,
+      breed: body.breed,
+      birthDate: body.birthDate,
+      gender: body.gender,
+      neutered: body.neutered,
+      weight: body.weight,
+      size: body.size,
+      furColor: body.furColor,
+      distinctiveFeatures: body.distinctiveFeatures,
+      activityLevel: body.activityLevel,
+      dietType: body.dietType,
+      allergies: body.allergies,
+    },
+  })
 
-    // Check subscription limits
-    const subscription = await prisma.subscription.findUnique({
-      where: { userId: session.user.id },
-    })
+  logger.info('Pet created', {
+    userId,
+    petId: pet.id,
+    species: pet.species,
+  })
 
-    const existingPetsCount = await prisma.pet.count({
-      where: { ownerId: session.user.id },
-    })
-
-    if (subscription?.plan === "FREE" && existingPetsCount >= 1) {
-      return NextResponse.json(
-        { error: "무료 플랜에서는 1마리만 등록할 수 있습니다. 프리미엄으로 업그레이드해주세요." },
-        { status: 403 }
-      )
-    }
-
-    const pet = await prisma.pet.create({
-      data: {
-        ownerId: session.user.id,
-        species,
-        name,
-        breed,
-        birthDate: new Date(birthDate),
-        gender,
-        neutered: neutered || false,
-        weight: parseFloat(weight),
-        size,
-        furColor: furColor || null,
-        distinctiveFeatures: distinctiveFeatures || null,
-        activityLevel: activityLevel || "MODERATE",
-        dietType: dietType || "DRY_FOOD",
-        allergies: allergies || [],
-      },
-    })
-
-    return NextResponse.json(pet, { status: 201 })
-  } catch (error) {
-    console.error("Error creating pet:", error)
-    return NextResponse.json(
-      { error: "반려동물 등록에 실패했습니다." },
-      { status: 500 }
-    )
-  }
-}
+  return createdResponse(pet)
+})

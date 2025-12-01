@@ -1,7 +1,41 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/db"
+/**
+ * Pet Detail API Routes
+ * CRUD operations for individual pets
+ */
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { handleApiError, parseBody, successResponse, noContentResponse } from '@/lib/api-utils'
+import { updatePetSchema } from '@/lib/validations/pet'
+import { AuthenticationError, NotFoundError, AuthorizationError } from '@/lib/errors'
+import { logger } from '@/lib/logger'
+
+// ============================================================================
+// Helper: Verify ownership
+// ============================================================================
+
+async function verifyPetOwnership(petId: string, userId: string) {
+  const pet = await prisma.pet.findUnique({
+    where: { id: petId },
+    select: { ownerId: true },
+  })
+
+  if (!pet) {
+    throw new NotFoundError('반려동물')
+  }
+
+  if (pet.ownerId !== userId) {
+    throw new AuthorizationError('이 반려동물에 대한 접근 권한이 없습니다.')
+  }
+
+  return pet
+}
+
+// ============================================================================
+// GET /api/pets/[id] - Get a single pet
+// ============================================================================
 
 export async function GET(
   request: Request,
@@ -12,24 +46,25 @@ export async function GET(
     const { id } = await params
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      throw new AuthenticationError()
     }
 
-    const pet = await prisma.pet.findFirst({
-      where: {
-        id,
-        ownerId: session.user.id,
-      },
+    await verifyPetOwnership(id, session.user.id)
+
+    const pet = await prisma.pet.findUnique({
+      where: { id },
       include: {
-        healthConditions: true,
+        healthConditions: {
+          orderBy: { diagnosedDate: 'desc' },
+        },
         medications: {
-          orderBy: { startDate: "desc" },
+          orderBy: { startDate: 'desc' },
         },
         vaccinations: {
-          orderBy: { nextDueDate: "asc" },
+          orderBy: { nextDueDate: 'asc' },
         },
         healthLogs: {
-          orderBy: { date: "desc" },
+          orderBy: { date: 'desc' },
           take: 30,
           include: {
             meals: true,
@@ -43,33 +78,31 @@ export async function GET(
           },
         },
         healthAnalyses: {
-          orderBy: { date: "desc" },
-          take: 7,
+          orderBy: { date: 'desc' },
+          take: 10,
           include: {
             anomalies: true,
             trends: true,
           },
         },
         healthAlerts: {
-          orderBy: { createdAt: "desc" },
-          take: 10,
+          orderBy: { createdAt: 'desc' },
+          take: 20,
         },
       },
     })
 
-    if (!pet) {
-      return NextResponse.json({ error: "Pet not found" }, { status: 404 })
-    }
+    logger.info('Pet fetched', { userId: session.user.id, petId: id })
 
-    return NextResponse.json(pet)
+    return successResponse(pet)
   } catch (error) {
-    console.error("Error fetching pet:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch pet" },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
+
+// ============================================================================
+// PUT/PATCH /api/pets/[id] - Update a pet
+// ============================================================================
 
 export async function PATCH(
   request: Request,
@@ -80,51 +113,49 @@ export async function PATCH(
     const { id } = await params
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      throw new AuthenticationError()
     }
 
-    const body = await request.json()
+    await verifyPetOwnership(id, session.user.id)
 
-    // Verify ownership
-    const existingPet = await prisma.pet.findFirst({
-      where: {
-        id,
-        ownerId: session.user.id,
-      },
-    })
+    // Parse and validate body
+    const body = await parseBody(request, updatePetSchema)
 
-    if (!existingPet) {
-      return NextResponse.json({ error: "Pet not found" }, { status: 404 })
-    }
-
-    const updatedPet = await prisma.pet.update({
+    // Update pet
+    const pet = await prisma.pet.update({
       where: { id },
       data: {
-        name: body.name,
-        breed: body.breed,
-        birthDate: body.birthDate ? new Date(body.birthDate) : undefined,
-        gender: body.gender,
-        neutered: body.neutered,
-        weight: body.weight ? parseFloat(body.weight) : undefined,
-        size: body.size,
-        profileImage: body.profileImage,
-        furColor: body.furColor,
-        distinctiveFeatures: body.distinctiveFeatures,
-        activityLevel: body.activityLevel,
-        dietType: body.dietType,
-        allergies: body.allergies,
+        ...(body.species && { species: body.species }),
+        ...(body.name && { name: body.name }),
+        ...(body.breed && { breed: body.breed }),
+        ...(body.birthDate && { birthDate: body.birthDate }),
+        ...(body.gender && { gender: body.gender }),
+        ...(body.neutered !== undefined && { neutered: body.neutered }),
+        ...(body.weight && { weight: body.weight }),
+        ...(body.size && { size: body.size }),
+        ...(body.furColor !== undefined && { furColor: body.furColor }),
+        ...(body.distinctiveFeatures !== undefined && { distinctiveFeatures: body.distinctiveFeatures }),
+        ...(body.activityLevel && { activityLevel: body.activityLevel }),
+        ...(body.dietType && { dietType: body.dietType }),
+        ...(body.allergies && { allergies: body.allergies }),
+        ...(body.profileImage !== undefined && { profileImage: body.profileImage }),
+        ...(body.bodyConditionScore && { bodyConditionScore: body.bodyConditionScore }),
       },
     })
 
-    return NextResponse.json(updatedPet)
+    logger.info('Pet updated', { userId: session.user.id, petId: id })
+
+    return successResponse(pet)
   } catch (error) {
-    console.error("Error updating pet:", error)
-    return NextResponse.json(
-      { error: "Failed to update pet" },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
+
+export const PUT = PATCH
+
+// ============================================================================
+// DELETE /api/pets/[id] - Delete a pet
+// ============================================================================
 
 export async function DELETE(
   request: Request,
@@ -135,31 +166,20 @@ export async function DELETE(
     const { id } = await params
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      throw new AuthenticationError()
     }
 
-    // Verify ownership
-    const existingPet = await prisma.pet.findFirst({
-      where: {
-        id,
-        ownerId: session.user.id,
-      },
-    })
+    await verifyPetOwnership(id, session.user.id)
 
-    if (!existingPet) {
-      return NextResponse.json({ error: "Pet not found" }, { status: 404 })
-    }
-
+    // Delete pet (cascade will handle related records)
     await prisma.pet.delete({
       where: { id },
     })
 
-    return NextResponse.json({ message: "Pet deleted successfully" })
+    logger.info('Pet deleted', { userId: session.user.id, petId: id })
+
+    return noContentResponse()
   } catch (error) {
-    console.error("Error deleting pet:", error)
-    return NextResponse.json(
-      { error: "Failed to delete pet" },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }
