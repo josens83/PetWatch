@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+:root {
+  /* Background and Foreground */
+  --background: #FFFBF7;
+  --foreground: #1C1917;
+
+  /* Primary - Warm Orange */
+  --primary: #F97316;
+  --primary-foreground: #ffffff;
+
+  /* Secondary */
+  --secondary: #FFF7ED;
+  --secondary-foreground: #1C1917;
+
+  /* Muted */
+  --muted: #F5F5F4;
+  --muted-foreground: #78716C;
+
+  /* Accent */
+  --accent: #FFEDD5;
+  --accent-foreground: #1C1917;
+
+  /* Card */
+  --card: #ffffff;
+  --card-foreground: #1C1917;
+
+  /* Border and Input */
+  --border: #E7E5E4;
+  --input: #E7E5E4;
+  --ring: #F97316;
+
+  /* Destructive */
+  --destructive: #EF4444;
+  --destructive-foreground: #ffffff;
+
+  /* Health Status Colors */
+  --health-excellent: #22C55E;
+  --health-good: #84CC16;
+  --health-fair: #EAB308;
+  --health-concerning: #F97316;
+  --health-critical: #EF4444;
+
+  /* Species Accents */
+  --dog-accent: #3B82F6;
+  --cat-accent: #A855F7;
+
+  /* Radius */
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1C1917;
+    --foreground: #FAFAF9;
+
+    --primary: #FB923C;
+    --primary-foreground: #1C1917;
+
+    --secondary: #292524;
+    --secondary-foreground: #FAFAF9;
+
+    --muted: #292524;
+    --muted-foreground: #A8A29E;
+
+    --accent: #44403C;
+    --accent-foreground: #FAFAF9;
+
+    --card: #1C1917;
+    --card-foreground: #FAFAF9;
+
+    --border: #44403C;
+    --input: #44403C;
+    --ring: #FB923C;
+
+    --destructive: #DC2626;
+    --destructive-foreground: #FAFAF9;
+  }
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--muted);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground);
+}
+
+/* Health Score Animation */
+@keyframes pulse-health {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-health {
+  animation: pulse-health 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Mobile Touch Feedback */
+@media (hover: none) {
+  button:active {
+    opacity: 0.8;
+  }
+}
